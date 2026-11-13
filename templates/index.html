@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>StudyGuard AI — Giám sát học tập thông minh</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f4f6f8;--surface:#fff;--surface2:#f0f3f6;--line:#e2e7ed;--text:#14202b;--muted:#64748b;--brand:#0f766e;--brand-soft:#d9f2ee;--ok:#059669;--warn:#d97706;--bad:#dc2626;--bad-soft:#fde8e8;--warn-soft:#fdf0d8;--ok-soft:#dcf5ea;--r:14px;--sh:0 1px 2px rgba(15,30,50,.05),0 6px 20px rgba(15,30,50,.05)}
+:root[data-theme=dark]{--bg:#0d1319;--surface:#151d26;--surface2:#1b2631;--line:#26323f;--text:#e8eef4;--muted:#8a9aab;--brand:#2dd4bf;--brand-soft:#12332f;--ok:#34d399;--warn:#fbbf24;--bad:#f87171;--bad-soft:#3a1c1f;--warn-soft:#3a2f14;--ok-soft:#10322a;--sh:none}
+*{box-sizing:border-box}
+html{scroll-padding-top:70px}
+body{margin:0;font-family:'Be Vietnam Pro',system-ui,'Segoe UI',sans-serif;font-size:14px;line-height:1.55;color:var(--text);background:var(--bg);padding-top:env(safe-area-inset-top,0)}
+a{color:var(--brand)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.top{position:sticky;top:0;z-index:50;background:var(--surface);border-bottom:1px solid var(--line)}
+.top-in{max-width:1280px;margin:0 auto;padding:10px 20px;display:flex;align-items:center;gap:14px}
+.logo{width:36px;height:36px;border-radius:10px;background:var(--brand);color:#fff;display:grid;place-items:center;font-size:18px;flex:none}
+:root[data-theme=dark] .logo{color:#06201d}
+.brand b{display:block;font-size:15px;line-height:1.2}.brand span{font-size:12px;color:var(--muted)}
+.sp{flex:1}
+.clock{text-align:right;line-height:1.25}.clock b{font-variant-numeric:tabular-nums;font-size:15px}.clock span{display:block;font-size:12px;color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border-radius:999px;font-weight:600;font-size:13px;background:var(--ok-soft);color:var(--ok);max-width:42vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex:none;animation:blink 1.8s infinite}
+.pill.danger{background:var(--bad-soft);color:var(--bad)}.pill.warn{background:var(--warn-soft);color:var(--warn)}
+@keyframes blink{50%{opacity:.35}}
+.icon-btn{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:16px;flex:none}
+.wrap{max-width:1280px;margin:0 auto;padding:20px}
+.head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.head h2{margin:0;font-size:22px;letter-spacing:-.01em}.head p{margin:2px 0 0;color:var(--muted)}
+.layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:16px;align-items:start}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+@media(max-width:980px){.layout{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden}
+.card-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:13px 16px;border-bottom:1px solid var(--line)}
+.card-h h3{margin:0;font-size:14px;font-weight:600}
+.card-b{padding:16px}
+.badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--surface2);color:var(--muted);border:1px solid var(--line)}
+.video{position:relative;background:#000}
+.video img{display:block;width:100%;aspect-ratio:16/10;object-fit:cover}
+.live{position:absolute;top:12px;left:12px;display:inline-flex;align-items:center;gap:6px;background:rgba(0,0,0,.6);color:#fff;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600}
+.live i{width:7px;height:7px;border-radius:50%;background:#ef4444;animation:blink 1.2s infinite}
+.chip{position:absolute;left:12px;right:12px;bottom:12px;padding:10px 14px;border-radius:10px;font-weight:600;font-size:14px;background:rgba(5,60,45,.88);color:#b8f5de;backdrop-filter:blur(6px)}
+.chip.bad{background:rgba(127,20,30,.9);color:#ffd5d9}.chip.warn{background:rgba(120,70,5,.9);color:#ffe9b8}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media(max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--surface2);border-radius:12px;padding:12px 14px}
+.stat small{color:var(--muted);font-size:12px}.stat b{display:block;font-size:19px;margin-top:2px;font-variant-numeric:tabular-nums}
+.btn{border:0;border-radius:10px;padding:9px 14px;font-weight:600;font-size:13px;cursor:pointer;background:var(--brand);color:#fff;transition:filter .15s,transform .1s}
+:root[data-theme=dark] .btn{color:#06201d}
+.btn:hover{filter:brightness(1.08)}.btn:active{transform:scale(.98)}
+.btn.ghost{background:var(--surface);color:var(--text);border:1px solid var(--line)}
+.btn.danger{background:var(--bad);color:#fff}
+.btn.small{padding:6px 11px;font-size:12px}.btn.block{width:100%}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line)}
+.kv:last-child{border:0;padding-bottom:0}.kv:first-child{padding-top:0}
+.tag{font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.tag.on{background:var(--ok-soft);color:var(--ok)}.tag.off{background:var(--bad-soft);color:var(--bad)}
+label.lbl{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:14px 0 5px}
+select,input[type=text],input[type=number],input[type=password]{width:100%;padding:9px 11px;border-radius:10px;border:1px solid var(--line);background:var(--surface);outline:none;min-width:0}
+select:focus,input:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 10px}
+.switch{display:flex;align-items:center;gap:8px;margin:8px 0 0;font-size:13px}
+.switch input{width:16px;height:16px;accent-color:var(--brand)}
+.hint{font-size:12px;color:var(--muted);background:var(--surface2);padding:9px 11px;border-radius:10px;margin:10px 0}
+.msg{min-height:1.2em;font-size:13px;margin-top:8px;color:var(--muted)}
+.chat{background:var(--surface2);border-radius:12px;padding:13px;min-height:84px;white-space:pre-wrap;line-height:1.65}
+.form{display:flex;gap:8px;margin-top:10px}.form input{flex:1}
+details.card summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:13px 16px;font-weight:600;font-size:14px}
+details.card summary::-webkit-details-marker{display:none}
+details.card summary::after{content:'▾';margin-left:auto;color:var(--muted);transition:transform .2s}
+details.card[open] summary::after{transform:rotate(180deg)}
+details.card[open] summary{border-bottom:1px solid var(--line)}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:16px}
+.two{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px;margin-top:16px}
+@media(max-width:980px){.three,.two{grid-template-columns:1fr}}
+.list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;max-height:320px;overflow:auto}
+.list li{background:var(--surface2);border-radius:10px;padding:9px 12px;font-size:13px;word-break:break-word}
+.empty{color:var(--muted);text-align:center;padding:16px!important}
+.time{font-weight:600;font-variant-numeric:tabular-nums;color:var(--brand)}
+.task-done{text-decoration:line-through;opacity:.55}
+#snapPreview{display:none;width:100%;border-radius:10px;border:1px solid var(--line);margin-top:8px}
+.toast{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0));display:flex;flex-direction:column;gap:8px;z-index:99;max-width:min(340px,90vw)}
+.toast div{background:var(--text);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.25);animation:in .2s ease}
+.toast div.err{background:var(--bad);color:#fff}.toast div.okk{background:var(--ok);color:#fff}
+@keyframes in{from{transform:translateY(6px);opacity:0}}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:24px 16px calc(24px + env(safe-area-inset-bottom,0))}
+@media(max-width:640px){.clock{display:none}.top-in,.wrap{padding-left:14px;padding-right:14px}.brand span{display:none}.pill{max-width:50vw}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top"><div class="top-in">
+  <div class="logo">🎓</div>
+  <div class="brand"><b>StudyGuard AI</b><span>Tư thế · Điện thoại · Trợ lý học tập</span></div>
+  <div class="sp"></div>
+  <div class="clock"><b id="clock">--:--:--</b><span id="dateLine">—</span></div>
+  <div id="topPill" class="pill"><span class="dot"></span><span id="topPillText">Đang kết nối…</span></div>
+  <button class="icon-btn" id="themeBtn" onclick="toggleTheme()" aria-label="Đổi giao diện sáng/tối">🌓</button>
+</div></header>
+
+<main class="wrap">
+  <div class="head">
+    <div><h2>Học tập hôm nay</h2><p>Theo dõi hiện diện, tư thế ngồi và việc dùng điện thoại theo thời gian thực.</p></div>
+    <div class="row">
+      <button id="toggleBtn" class="btn danger" onclick="toggleCamera()">⏸ Tắt camera</button>
+      <button class="btn ghost" onclick="refreshAll()">↻ Làm mới</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="col">
+      <section class="card">
+        <div class="card-h"><h3>Camera trực tiếp</h3><span class="badge">MediaPipe + YOLOv8</span></div>
+        <div class="video">
+          <img id="liveImg" src="/video_feed" alt="Luồng camera trực tiếp">
+          <span class="live"><i></i>LIVE</span>
+          <div id="statusBox" class="chip">Đang tải trạng thái…</div>
+        </div>
+        <div class="card-b"><div class="stats">
+          <div class="stat"><small>Hôm nay</small><b id="studyTotal">—</b></div>
+          <div class="stat"><small>7 ngày</small><b id="weekTotal">—</b></div>
+          <div class="stat"><small>Dùng điện thoại</small><b id="statEvents">—</b></div>
+          <div class="stat"><small>Sai tư thế</small><b id="statAlerts">—</b></div>
+        </div></div>
+      </section>
+
+      <section class="card">
+        <div class="card-h"><h3>Trợ lý học tập</h3><span class="badge" id="modelBadge">GEMINI</span></div>
+        <div class="card-b">
+          <div id="lastHeard" class="hint" style="display:none;margin-top:0"></div>
+          <div id="assistantAnswer" class="chat">Bật micro rồi gọi “trợ lý ảo”, hoặc nhập câu hỏi bên dưới.</div>
+          <form id="assistantForm" class="form"><input id="assistantQuestion" type="text" maxlength="1000" placeholder="VD: giải thích định lý Pythagore…" required><button class="btn" type="submit">Gửi</button></form>
+        </div>
+      </section>
+    </div>
+
+    <div class="col">
+      <section class="card">
+        <div class="card-h"><h3>Thiết bị</h3></div>
+        <div class="card-b">
+          <div class="kv"><span>📷 Camera</span><strong id="camStatus"><span class="tag off">…</span></strong></div>
+          <div class="kv"><span>🎙 Micro</span><strong id="micStatus"><span class="tag off">…</span></strong></div>
+          <div class="kv"><span>🔊 Loa</span><strong id="speakerStatus"><span class="tag off">…</span></strong></div>
+          <div class="kv"><span>🤖 Trợ lý</span><strong id="assistantStatus" style="font-size:12px">…</strong></div>
+          <div class="row" style="margin-top:14px">
+            <button class="btn small ghost" onclick="testDevice('camera')">Test cam</button>
+            <button class="btn small ghost" onclick="testDevice('microphone')">Test mic</button>
+            <button class="btn small ghost" onclick="testDevice('speaker')">Test loa</button>
+          </div>
+          <div id="testResult" class="msg"></div>
+          <div class="hint">Test cam chụp 1 khung hình, test mic ghi 2 giây và đo tín hiệu, test loa phát tiếng bíp 660Hz.</div>
+          <img id="snapPreview" alt="Ảnh chụp thử">
+        </div>
+      </section>
+
+      <details class="card" open>
+        <summary>Cài đặt</summary>
+        <div class="card-b" style="padding-top:2px">
+          <label class="lbl">GEMINI_API_KEY <span id="keyState" class="badge">chưa có</span></label>
+          <div class="form" style="margin-top:0">
+            <input id="geminiKey" type="password" maxlength="200" placeholder="Dán key — để trống = giữ key cũ" autocomplete="off">
+            <button class="btn small ghost" type="button" onclick="toggleKey()" aria-label="Hiện/ẩn key">👁</button>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <button class="btn small ghost" onclick="saveKey()">Lưu key</button>
+            <button class="btn small ghost" onclick="clearKey()">Xóa key</button>
+          </div>
+          <label class="lbl" for="geminiModel">Gemini model</label>
+          <input id="geminiModel" type="text" maxlength="80" placeholder="gemini-2.5-flash" autocomplete="off">
+          <div class="hint">Tên model đúng theo Google AI Studio, ví dụ gemini-2.5-flash. Đổi model rồi bấm Lưu cài đặt.</div>
+          <div class="row" style="margin-top:8px">
+            <button class="btn small ghost" type="button" onclick="testGemini()">Kiểm tra Gemini</button>
+          </div>
+          <label class="lbl">Camera đầu vào</label><select id="cameraDevice"></select>
+          <label class="switch"><input id="cameraEnabled" type="checkbox"> Bật camera</label>
+          <label class="lbl">Micro đầu vào</label><select id="microphoneDevice"></select>
+          <label class="switch"><input id="microphoneEnabled" type="checkbox"> Kết nối micro</label>
+          <label class="lbl">Loa đầu ra</label><select id="speakerDevice"></select>
+          <label class="switch"><input id="speakerEnabled" type="checkbox"> Kết nối loa</label>
+          <label class="lbl">Giọng đọc tiếng Việt</label>
+          <select id="ttsVoice">
+            <option value="vi-VN-NamAnhNeural">Nam Anh (nam, trẻ)</option>
+            <option value="vi-VN-ThanhBinhNeural">Thanh Bình (nam)</option>
+            <option value="vi-VN-HoaiMyNeural">Hoài My (nữ)</option>
+            <option value="vi-VN-MyAnNeural">Mỹ An (nữ, trẻ)</option>
+          </select>
+          <div class="row" style="margin-top:8px"><button class="btn small ghost" onclick="testVoice()">🔊 Nghe thử giọng</button></div>
+          <div class="grid2">
+            <div><label class="lbl">Gù lưng &gt; (độ)</label><input id="backAngle" type="number" min="10" max="60" step="1"></div>
+            <div><label class="lbl">Cúi đầu &gt; (tỉ lệ)</label><input id="headRatio" type="number" min="0.2" max="1" step="0.05"></div>
+            <div><label class="lbl">Báo sau (giây)</label><input id="alertAfter" type="number" min="2" max="20" step="1"></div>
+            <div><label class="lbl">Xác nhận phone (giây)</label><input id="phoneConfirm" type="number" min="10" max="120" step="1"></div>
+          </div>
+          <div class="hint">Gợi ý: gù lưng 25°, cúi đầu 0.45, báo sau 5 giây, phone 30 giây.</div>
+          <button class="btn block" onclick="saveSettings()">Lưu cài đặt</button>
+          <div id="settingsMessage" class="msg"></div>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <div class="three">
+    <section class="card"><div class="card-h"><h3>Phiên học</h3></div><div class="card-b"><ul id="sessionList" class="list"></ul></div></section>
+    <section class="card"><div class="card-h"><h3>Điện thoại &amp; tư thế</h3></div><div class="card-b"><ul id="eventList" class="list"></ul></div></section>
+    <section class="card"><div class="card-h"><h3>Nhiệm vụ</h3></div><div class="card-b">
+      <form id="taskForm" class="form" style="margin:0 0 10px"><input id="taskDescription" type="text" maxlength="300" placeholder="VD: Ôn Toán chương 2…" required><button class="btn" type="submit">Lưu</button></form>
+      <ul id="taskList" class="list"></ul>
+      <div id="historyMessage" class="msg"></div>
+    </div></section>
+  </div>
+
+  <div class="two">
+    <section class="card">
+      <div class="card-h"><h3>System log</h3><span class="badge" id="logCount">0</span><div class="sp"></div>
+        <button class="btn small ghost" onclick="loadLogs()">↻ Tải log</button>
+        <button class="btn small ghost" onclick="clearLogs()">Xóa log</button></div>
+      <div class="card-b"><ul id="logList" class="list" style="max-height:360px"></ul></div>
+    </section>
+    <section class="card">
+      <div class="card-h"><h3>Tải hệ thống</h3><div class="sp"></div><button class="btn small ghost" onclick="loadSystem()">↻ Tải</button></div>
+      <div class="card-b">
+        <div class="kv"><span>CPU</span><strong id="sysCpu">—</strong></div>
+        <div class="kv"><span>RAM</span><strong id="sysRam">—</strong></div>
+        <div class="kv"><span>Ổ đĩa trống</span><strong id="sysDisk">—</strong></div>
+        <div class="kv"><span>Database</span><strong id="sysDb" style="text-align:right">—</strong></div>
+        <div class="kv"><span>Clip bằng chứng</span><strong id="sysEv">—</strong></div>
+        <div class="hint" id="sysNote" style="display:none"></div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn small danger" onclick="clearCache()">Xóa cache</button>
+          <button class="btn small danger" onclick="clearData(false)">Xóa dữ liệu</button>
+          <button class="btn small danger" onclick="clearData(true)">Xóa cả clip</button>
+        </div>
+        <div id="sysMsg" class="msg"></div>
+      </div>
+    </section>
+  </div>
+  <footer>StudyGuard AI · MediaPipe Pose + Hand + YOLOv8n · Xử lý tại thiết bị, không lưu video liên tục · <span id="footYear"></span></footer>
+</main>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+/* Giao diện sáng/tối */
+function applyTheme(t){document.documentElement.setAttribute('data-theme',t);}
+(function(){let t=null;try{t=localStorage.getItem('sg-theme');}catch(e){}
+  applyTheme(t||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'));})();
+function toggleTheme(){const t=document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark';applyTheme(t);try{localStorage.setItem('sg-theme',t);}catch(e){}}
+
+function toast(m,cls=''){const t=document.createElement('div');if(cls)t.className=cls;t.textContent=m;$('toast').appendChild(t);setTimeout(()=>t.remove(),3400);}
+function tick(){const n=new Date();$('clock').textContent=n.toLocaleTimeString('vi-VN');$('dateLine').textContent=n.toLocaleDateString('vi-VN',{weekday:'long',day:'2-digit',month:'2-digit'});$('footYear').textContent=n.getFullYear();}
+setInterval(tick,1000);tick();
+function refreshAll(){updateDashboard();updateStatus();loadSystem();loadLogs();toast('Đã làm mới dữ liệu','okk');}
+function lvlColor(l){return l==='WARN'?'var(--warn)':(l==='ERROR'?'var(--bad)':'var(--ok)');}
+function loadLogs(){
+  fetch('/api/logs?limit=200').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(j=>{
+    $('logCount').textContent=(j.logs||[]).length;
+    const ul=$('logList');ul.replaceChildren();
+    if(!(j.logs||[]).length){const li=document.createElement('li');li.className='empty';li.textContent='Chưa có log';ul.appendChild(li);return;}
+    j.logs.forEach(l=>{
+      const li=document.createElement('li');
+      const time=document.createElement('span');time.className='time';time.textContent=tfmt(l.created_at);
+      const level=document.createElement('b');level.style.color=lvlColor(l.level);level.textContent=` [${l.level}] `;
+      const source=document.createElement('span');source.className='badge';source.textContent=l.source;
+      li.append(time,level,source,document.createElement('br'),document.createTextNode(l.message));
+      ul.appendChild(li);
+    });
+  }).catch(e=>toast(e.message,'err'));
+}
+setInterval(loadLogs,15000);
+function clearLogs(){
+  if(!confirm('Xóa toàn bộ system log?'))return;
+  fetch('/api/logs',{method:'DELETE'}).then(r=>r.json()).then(()=>{loadLogs();toast('Đã xóa log','okk');}).catch(e=>toast(e.message,'err'));
+}
+function loadSystem(){
+  fetch('/api/system').then(r=>r.json()).then(s=>{
+    $('sysCpu').textContent=s.cpu_percent!=null?(s.cpu_percent+'%'):'— (cài psutil)';
+    $('sysRam').textContent=s.ram_percent!=null?(`${s.ram_percent}% (${s.ram_used_mb}/${s.ram_total_mb} MB)`):'—';
+    $('sysDisk').textContent=s.disk_free_gb!=null?`${s.disk_free_gb}/${s.disk_total_gb} GB trống`:'—';
+    $('sysDb').textContent=(s.db_text||'—')+` · assistant: ${s.assistant? s.assistant.state:''}`;
+    $('sysEv').textContent=`${s.evidence_files} clip · ${s.evidence_mb} MB`;
+    if(s.yolo&&s.yolo.error){$('sysNote').style.display='block';$('sysNote').textContent='YOLO: '+s.yolo.error;}
+    else if(s.note){$('sysNote').style.display='block';$('sysNote').textContent=s.note;}
+    else{$('sysNote').style.display='none';}
+  }).catch(e=>{$('sysMsg').textContent=e.message;});
+}
+setInterval(loadSystem,10000);
+function clearCache(){
+  fetch('/api/system/clear_cache',{method:'POST'}).then(r=>r.json().then(j=>({ok:r.ok,j}))).then(({ok,j})=>{
+    if(!ok)throw new Error('Xóa thất bại');$('sysMsg').textContent='✅ Đã xóa cache: '+(j.cleared.join(', ')||'không có');loadSystem();
+  }).catch(e=>$('sysMsg').textContent=e.message);
+}
+function clearData(withEvidence){
+  if(!confirm(withEvidence?'XÓA TOÀN BỘ dữ liệu + clip bằng chứng?':'Xóa toàn bộ phiên/sự kiện/nhiệm vụ/log (giữ clip)?'))return;
+  fetch('/api/data'+(withEvidence?'?evidence=1':''),{method:'DELETE'}).then(r=>r.json()).then(j=>{
+    $('sysMsg').textContent='✅ Đã xóa dữ liệu'+(withEvidence?` (${j.evidence.removed} clip)`:'');
+    updateDashboard();loadLogs();loadSystem();
+  }).catch(e=>$('sysMsg').textContent=e.message);
+}
+function tag(on,txt){return `<span class="tag ${on?'on':'off'}">${txt}</span>`;}
+function setDev(id,dev,extra){
+  const el=$(id);if(!el)return;
+  if(dev&&dev.error){el.innerHTML=tag(false,'Lỗi');return;}
+  if(!(dev&&(dev.enabled??dev.connected))){el.innerHTML=tag(false,'Đã tắt');return;}
+  if(extra){el.innerHTML=tag(extra.ok,extra.txt);return;}
+  el.innerHTML=tag(!!(dev&&dev.connected),'● Đang bật');
+}
+let statusFail=0;
+function updateStatus(){
+  fetch('/get_status').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}).then(d=>{
+    statusFail=0;
+    const box=$('statusBox');
+    if(box){box.textContent=d.status||'—';box.className='chip '+((d.type==='danger')?'bad':((d.type==='warn')?'warn':'ok'));}
+    const pill=$('topPill');if(pill){pill.classList.toggle('danger',d.type==='danger');pill.classList.toggle('warn',d.type==='warn');}
+    const pt=$('topPillText');if(pt)pt.textContent=d.status||'—';
+    const camExtra=d.camera&&d.camera.enabled?{ok:d.camera.grab_ok!==false,txt:d.camera.grab_ok===false?'⚠ Không đọc được hình':'● Camera OK'}:null;
+    const micExtra=d.microphone&&d.microphone.enabled?{ok:!d.microphone.error,txt:d.microphone.error?('⚠ '+String(d.microphone.error).slice(0,40)):'● Mic OK ('+(d.microphone.connected?'đang nghe':'chờ gọi')+')'}:null;
+    const spkExtra=d.speaker&&d.speaker.enabled?{ok:true,txt:'● Loa OK (test loa để chắc)'}:null;
+    setDev('camStatus',d.camera,camExtra);setDev('micStatus',d.microphone,micExtra);setDev('speakerStatus',d.speaker,spkExtra);
+    const as=$('assistantStatus');if(as)as.textContent=(d.assistant?d.assistant.state:'?')+((d.assistant&&d.assistant.error)?': '+d.assistant.error:'');
+    if(d.assistant&&d.assistant.last_heard){const lh=$('lastHeard');if(lh){lh.style.display='block';lh.textContent='🎙 Vừa nghe: "'+d.assistant.last_heard+'"';}}
+    if(d.assistant&&d.assistant.last_answer){const aa=$('assistantAnswer');if(aa)aa.textContent=d.assistant.last_answer;}
+    const ce=$('cameraEnabled');if(ce&&typeof d.camera!=='undefined')ce.checked=!!d.camera.enabled;
+    const tb=$('toggleBtn');if(tb&&d.camera){tb.textContent=d.camera.enabled?'⏸ Tắt camera':'▶ Bật camera';tb.className='btn '+(d.camera.enabled?'danger':'');}
+  }).catch(()=>{
+    statusFail++;
+    const pt=$('topPillText');if(pt)pt.textContent=`Mất kết nối server (thử ${statusFail})`;
+    const box=$('statusBox');if(box){box.textContent='❌ Không nối được server — kiểm tra cửa sổ py app.py còn chạy, rồi Ctrl+F5.';box.className='chip bad';}
+  });
+}
+setInterval(updateStatus,2000);
+const tfmt=v=>v?new Date(v).toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'đang diễn ra';
+function fill(id,arr,fn){const ul=$(id);ul.innerHTML='';if(!arr.length){ul.innerHTML='<li class="empty">Chưa có dữ liệu</li>';return;}arr.forEach(x=>{const li=document.createElement('li');fn(li,x);ul.appendChild(li);});}
+function updateDashboard(){
+  fetch('/api/dashboard').then(r=>r.json().then(j=>({ok:r.ok,j}))).then(({ok,j})=>{
+    if(!ok)throw new Error(j.error||'Lỗi tải dữ liệu');
+    $('studyTotal').textContent=j.study_text;$('weekTotal').textContent=j.week_text;
+    $('statEvents').textContent=j.events.length;$('statAlerts').textContent=j.posture_alerts.length;
+    fill('sessionList',j.sessions,(li,s)=>{li.innerHTML=`<span class="time">${tfmt(s.started_at)} → ${tfmt(s.ended_at)}</span><br>⏱ ${s.duration_text}`;});
+    const ul=$('eventList');ul.replaceChildren();
+    const items=[];
+    (j.events||[]).forEach(e=>items.push({type:'phone',data:e,sort:e.started_at}));
+    (j.posture_alerts||[]).forEach(a=>items.push({type:'posture',data:a,sort:a.started_at}));
+    items.sort((a,b)=>(b.sort||'').localeCompare(a.sort||''));
+    if(!items.length){const li=document.createElement('li');li.className='empty';li.textContent='Chưa có dữ liệu';ul.appendChild(li);}
+    items.slice(0,50).forEach(it=>{
+      const li=document.createElement('li'),time=document.createElement('span');time.className='time';
+      const detail=document.createElement('span');
+      if(it.type==='phone'){
+        const e=it.data;time.textContent=`📵 ${tfmt(e.started_at)} → ${tfmt(e.ended_at)}`;detail.textContent=e.details||'';
+        li.append(time,document.createElement('br'),detail);
+        if(e.evidence_path){const link=document.createElement('a');link.href='/evidence/'+encodeURIComponent(e.evidence_path);link.target='_blank';link.rel='noopener';link.textContent=' · 📎 clip';li.append(link);}
+      }else{
+        const a=it.data;time.textContent=`⚠ ${tfmt(a.started_at)}${a.ended_at?' → '+tfmt(a.ended_at):''}`;
+        detail.textContent=`${a.kind==='hunch'?'Gù lưng':'Cúi đầu'} · ${Math.round(a.duration_seconds||0)} giây${a.detail?' · '+a.detail:''}`;
+        li.append(time,document.createElement('br'),detail);
+      }
+      ul.appendChild(li);
+    });
+    fill('taskList',j.tasks,(li,t)=>{
+      const toggle=document.createElement('input');toggle.type='checkbox';toggle.checked=!!t.done;toggle.onchange=()=>toggleTask(t.id);toggle.style.cssText='width:auto;accent-color:var(--brand)';
+      const desc=document.createElement('span');desc.className=t.done?'task-done':'';desc.textContent=t.description;
+      const br=document.createElement('br'),time=document.createElement('span');time.className='time';time.textContent=tfmt(t.created_at);
+      const del=document.createElement('a');del.href='#';del.textContent='xóa';del.onclick=()=>{delTask(t.id);return false;};
+      li.append(toggle,document.createTextNode(' '),desc,br,time,document.createTextNode(' · '),del);
+    });
+  }).catch(e=>{$('historyMessage').textContent=e.message;});
+}
+setInterval(updateDashboard,15000);
+function fillSel(sel,arr,val){if(!sel)return;sel.innerHTML='';(arr||[]).forEach(o=>{const op=document.createElement('option');op.value=o.id;op.textContent=o.name;sel.appendChild(op);});if(val!==undefined&&val!==null)sel.value=String(val);}
+let currentSettings={};
+let settingsFail=0;
+function loadSettings(){
+  fetch('/api/settings').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json().then(j=>({ok:r.ok,j}));}).then(({ok,j})=>{
+    if(!ok)throw new Error(j.error||'Lỗi tải thiết bị');
+    settingsFail=0;
+    currentSettings=j.settings||{};
+    fillSel($('cameraDevice'),j.devices.cameras,j.settings.camera_index);
+    fillSel($('microphoneDevice'),j.devices.microphones,j.settings.microphone_device??'default');
+    fillSel($('speakerDevice'),j.devices.speakers,j.settings.speaker_device??'default');
+    $('cameraEnabled').checked=j.settings.camera_enabled;$('microphoneEnabled').checked=j.settings.microphone_enabled;$('speakerEnabled').checked=j.settings.speaker_enabled;
+    if(j.settings.tts_voice)$('ttsVoice').value=j.settings.tts_voice;
+    $('geminiModel').value=j.settings.gemini_model||'gemini-2.5-flash';
+    const mb=$('modelBadge');if(mb&&j.settings.gemini_model)mb.textContent=j.settings.gemini_model.toUpperCase();
+    $('backAngle').value=j.settings.back_angle_deg;$('headRatio').value=j.settings.head_dx_ratio;
+    $('alertAfter').value=j.settings.alert_after_seconds;$('phoneConfirm').value=j.settings.phone_confirm_seconds;
+    markKey();
+  }).catch(e=>{
+    settingsFail++;
+    const sm=$('settingsMessage');
+    if(sm){sm.textContent=`Không tải được cài đặt (thử ${settingsFail}): ${e.message} — kiểm tra py app.py, rồi F5.`;sm.style.color='var(--bad)';}
+  });
+}
+setInterval(()=>{if(settingsFail>0)loadSettings();},5000);
+function valNum(id,fallback){const v=Number($(id).value);return Number.isFinite(v)&&v>0?v:fallback;}
+function toggleKey(){const k=$('geminiKey');k.type=k.type==='password'?'text':'password';}
+function saveKey(){
+  const key=$('geminiKey').value.trim();
+  if(!key){toast('Để trống = giữ key cũ. Muốn xóa thì bấm Xóa key','');return;}
+  fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({gemini_api_key:key})})
+    .then(r=>r.json().then(j=>({ok:r.ok,j}))).then(({ok,j})=>{
+      if(!ok)throw new Error(j.error||'Lưu key thất bại');
+      currentSettings=j.settings;$('geminiKey').value='';markKey();
+      if(j.settings.gemini_model){$('geminiModel').value=j.settings.gemini_model;$('modelBadge').textContent=j.settings.gemini_model.toUpperCase();}
+      toast('Đã lưu Gemini API key','okk');
+    }).catch(e=>toast(e.message,'err'));
+}
+function testGemini(){
+  const box=$('settingsMessage');box.textContent='Đang kiểm tra key và model…';box.style.color='var(--muted)';
+  const payload={model:$('geminiModel').value.trim()};
+  if($('geminiKey').value.trim())payload.api_key=$('geminiKey').value.trim();
+  fetch('/api/gemini/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+    .then(r=>r.json().then(j=>({ok:r.ok,j}))).then(({ok,j})=>{
+      if(!ok)throw new Error(j.error||'Kiểm tra Gemini thất bại');
+      box.textContent='✅ '+j.message;box.style.color='var(--ok)';toast(j.message,'okk');
+    }).catch(e=>{box.textContent='❌ '+e.message;box.style.color='var(--bad)';toast(e.message,'err');});
+}
+function clearKey(){
+  if(!confirm('Xóa GEMINI_API_KEY khỏi config.json?'))return;
+  fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({gemini_api_key:'CLEAR'})})
+    .then(r=>r.json().then(j=>({ok:r.ok,j}))).then(({ok,j})=>{
+      if(!ok)throw new Error(j.error||'Xóa thất bại');
+      currentSettings=j.settings;markKey();toast('Đã xóa key','okk');
+    }).catch(e=>toast(e.message,'err'));
+}
+function markKey(){
+  const has=currentSettings.gemini_api_key_set;
+  $('keyState').textContent=has?('đã có '+(currentSettings.gemini_api_key||'')):'chưa có';
+}
+function saveSettings(){
+  const cv=v=>v==='default'?null:Number(v);
+  const p={camera_index:Number($('cameraDevice').value),camera_enabled:$('cameraEnabled').checked,
+    microphone_device:cv($('microphoneDevice').value),microphone_enabled:$('microphoneEnabled').checked,
+    speaker_device:cv($('speakerDevice').value),speaker_enabled:$('speakerEnabled').checked,
+    tts_voice:$('ttsVoice').value,
+    gemini_model:$('geminiModel').value.trim(),
+    back_angle_deg:valNum('backAngle',currentSettings.back_angle_deg||25),
+    head_dx_ratio:valNum('headRatio',currentSettings.head_dx_ratio||0.45),
+    alert_after_seconds:valNum('alertAfter',currentSettings.alert_after_seconds||5),
+    phone_confirm_seconds:valNum('phoneConfirm',currentSettings.phone_confirm_seconds||30)};
+  fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)})
+    .then(r=>r.json().then(j=>({ok:r.ok,j}))).then(({ok,j})=>{if(!ok)throw new Error(j.error||'Lưu thất bại');currentSettings=j.settings;$('modelBadge').textContent=p.gemini_model.toUpperCase();$('settingsMessage').textContent='✅ Đã lưu';$('settingsMessage').style.color='var(--ok)';toast('Đã lưu cài đặt','okk');updateStatus();})
+    .catch(e=>{$('settingsMessage').textContent=e.message;$('settingsMessage').style.color='var(--bad)';toast(e.message,'err');});
+}
+function toggleCamera(){
+  fetch('/toggle_camera',{method:'POST'}).then(r=>r.json().then(j=>({ok:r.ok,j}))).then(({ok,j})=>{
+    if(!ok)throw new Error(j.error||'Lỗi camera');$('cameraEnabled').checked=j.active;updateStatus();toast(j.active?'Đã bật camera':'Đã tắt camera','okk');
+  }).catch(e=>toast(e.message,'err'));
+}
+function testVoice(){
+  const box=$('testResult');box.textContent='⏳ Đang đọc thử giọng Việt…';box.style.color='var(--muted)';
+  fetch('/api/test/voice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tts_voice:$('ttsVoice').value,speaker_device:$('speakerDevice').value})})
+    .then(r=>r.json().then(j=>({ok:r.ok,j}))).then(({ok,j})=>{
+      if(!ok)throw new Error(j.error||'Đọc thử thất bại');
+      box.textContent='✅ '+j.message;box.style.color='var(--ok)';toast(j.message,'okk');
+    }).catch(e=>{box.textContent='❌ '+e.message;box.style.color='var(--bad)';});
+}
+function testDevice(kind){
+  const body={camera_index:Number($('cameraDevice').value),
+    microphone_device:$('microphoneDevice').value,speaker_device:$('speakerDevice').value,seconds:2};
+  const box=$('testResult');box.textContent='⏳ Đang test '+kind+'…';box.style.color='var(--muted)';
+  $('snapPreview').style.display='none';
+  fetch('/api/test/'+kind,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(r=>r.json().then(j=>({ok:r.ok,j}))).then(({ok,j})=>{
+      if(!ok)throw new Error(j.error||('Test '+kind+' thất bại'));
+      box.textContent='✅ '+j.message;box.style.color='var(--ok)';
+      if(kind==='camera'){$('snapPreview').src='/snapshot.jpg?t='+Date.now();$('snapPreview').style.display='block';}
+      toast(j.message,'okk');
+    }).catch(e=>{box.textContent='❌ '+e.message;box.style.color='var(--bad)';toast(e.message,'err');});
+}
+function toggleTask(id){fetch('/api/tasks/'+id+'/toggle',{method:'POST'}).then(()=>updateDashboard());}
+function delTask(id){fetch('/api/tasks/'+id,{method:'DELETE'}).then(()=>updateDashboard());}
+$('taskForm').addEventListener('submit',e=>{e.preventDefault();const inp=$('taskDescription');
+  fetch('/api/tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({description:inp.value})})
+  .then(r=>r.json().then(j=>({ok:r.ok,j}))).then(({ok,j})=>{if(!ok)throw new Error(j.error||'Lưu thất bại');inp.value='';updateDashboard();toast('Đã lưu nhiệm vụ','okk');})
+  .catch(e=>$('historyMessage').textContent=e.message);});
+$('assistantForm').addEventListener('submit',e=>{e.preventDefault();const q=$('assistantQuestion');$('assistantAnswer').textContent='⏳ Trợ lý đang suy nghĩ…';
+  fetch('/api/assistant/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q.value})})
+  .then(r=>r.json().then(j=>({ok:r.ok,j}))).then(({ok,j})=>{if(!ok)throw new Error(j.error||'Trợ lý bận');$('assistantAnswer').textContent=j.answer;q.value='';})
+  .catch(e=>$('assistantAnswer').textContent='❌ '+e.message);});
+const liveImg=$('liveImg');
+let lastFrameAt=Date.now(), streamRetryAt=0;
+liveImg.addEventListener('load',()=>{lastFrameAt=Date.now();});
+liveImg.addEventListener('error',()=>{lastFrameAt=0;});
+setInterval(()=>{
+  if(Date.now()-lastFrameAt>5000&&Date.now()-streamRetryAt>5000){
+    streamRetryAt=Date.now();lastFrameAt=Date.now();
+    liveImg.src='/video_feed?retry='+streamRetryAt;
+  }
+},2000);
+loadSettings();updateStatus();updateDashboard();loadSystem();loadLogs();
+</script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "camera_index": 0,
+  "camera_enabled": true,
+  "microphone_device": null,
+  "microphone_enabled": true,
+  "speaker_device": null,
+  "speaker_enabled": true,
+  "gemini_api_key": "",
+  "gemini_model": "gemini-2.5-flash",
+  "back_angle_deg": 25,
+  "head_dx_ratio": 0.45,
+  "alert_after_seconds": 5,
+  "good_after_seconds": 2,
+  "smooth_window": 8,
+  "phone_confirm_seconds": 30,
+  "phone_miss_grace": 6,
+  "phone_end_grace": 6,
+  "phone_conf": 0.55,
+  "wrist_dist_px": 65,
+  "phone_every_seconds": 2.0
+}

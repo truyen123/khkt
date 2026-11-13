@@ -1,0 +1,22 @@
+# StudyGuard AI - Base requirements (camera + MediaPipe Pose + Gemini chatbot + TTS)
+# For Raspberry Pi 3 1GB RAM: use requirements-pi.txt instead to skip YOLO.
+
+Flask>=3.0,<4.0
+numpy>=2,<3; python_version >= "3.13"
+numpy>=1.24; python_version < "3.13"
+opencv-python-headless>=4.8
+mediapipe>=0.10.30; python_version >= "3.13"
+mediapipe>=0.10,<0.10.30; python_version < "3.13"
+
+# Phone detection (disabled on low-RAM devices; set STUDY_ENABLE_YOLO=1 to force enable)
+ultralytics>=8.2; python_version < "3.14"
+
+# Audio I/O
+sounddevice>=0.4.6
+SpeechRecognition>=3.10
+pyttsx3>=2.90
+edge-tts>=7.0
+soundfile>=0.12
+
+# LLM integration
+google-genai>=1.0

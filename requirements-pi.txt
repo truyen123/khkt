@@ -1,0 +1,18 @@
+# StudyGuard AI - Raspberry Pi 3 1GB RAM optimized (no phone detection / YOLOv8)
+# Usage: pip install -r requirements-pi.txt
+# To enable YOLO despite low memory: pip install ultralytics && export STUDY_ENABLE_YOLO=1
+
+Flask>=3.0,<4.0
+numpy>=1.24; python_version < "3.13"
+opencv-python-headless>=4.8
+mediapipe>=0.10,<0.10.30; python_version < "3.13"
+
+# Audio I/O
+sounddevice>=0.4.6
+SpeechRecognition>=3.10
+pyttsx3>=2.90
+edge-tts>=7.0
+soundfile>=0.12
+
+# LLM integration
+google-genai>=1.0
