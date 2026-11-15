@@ -1,4 +1,4 @@
-"""Voice assistant: wake-word listening (offline mic) + Gemini answers + offline TTS."""
+﻿"""Voice assistant: wake-word listening (offline mic) + Gemini answers + offline TTS."""
 import logging
 import tempfile
 import time
@@ -77,111 +77,122 @@ class VoiceAssistant:
         cfg = self.get_config()
         if not cfg.get("speaker_enabled"):
             return
-        import sounddevice as sd
-        # Giong Viet neural (Microsoft Edge TTS, can mang). Rớt mang -> pyttsx3 offline.
-        voice = cfg.get("tts_voice") or "vi-VN-NamAnhNeural"
-        rate_str = "+0%"
-        tmp = None
         try:
-            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-                tmp = Path(f.name)
+            import sounddevice as sd
+            # Giong Viet neural (Microsoft Edge TTS - Google Cloud also ok). Roi mang -> pyttsx3 offline.
+            # List giong co san: vi-VN-HoaiMyNeural (nu), vi-VN-LinhNeural (nu), vi-VN-NamMinNeural (nam)
+            voice = cfg.get("tts_voice") or "vi-VN-HoaiMyNeural"
+            rate_str = "+0%"
+            tmp = None
             try:
-                import asyncio
-                import edge_tts
-                asyncio.run(asyncio.wait_for(
-                    edge_tts.Communicate(text, voice=voice, rate=rate_str).save(str(tmp)),
-                    timeout=20))
-            except Exception as e:
-                logger.warning("edge-tts that bai (%s) -> dung pyttsx3 offline", e)
-                tmp.unlink(missing_ok=True)
-                self._speak_offline(text, cfg)
-                return
-            import soundfile as sf
-            audio, rate = sf.read(str(tmp), dtype="float32", always_2d=False)
-            # Mot so loa (VD Bluetooth/USB) khong ho tro sample rate cua file TTS
-            # -> resample ve dung default_samplerate cua thiet bi truoc khi play.
-            dev = cfg.get("speaker_device")
-            try:
-                info = sd.query_devices(dev, "output")
-                target = int(info.get("default_samplerate") or rate)
-            except Exception:
-                target = rate
-            if target != rate and rate > 0:
-                n_old = audio.shape[0]
-                n_new = max(1, int(round(n_old * target / rate)))
-                xp = np.linspace(0, 1, n_old)
-                fp = np.linspace(0, 1, n_new)
-                if audio.ndim == 1:
-                    audio = np.interp(fp, xp, audio).astype(np.float32)
-                else:
-                    audio = np.stack(
-                        [np.interp(fp, xp, audio[:, i]) for i in range(audio.shape[1])],
-                        axis=1).astype(np.float32)
-                rate = target
-            try:
-                sd.play(audio, samplerate=rate, device=dev)
-                sd.wait()
-            except Exception as e:
-                raise RuntimeError(f"Loa khong mo duoc (rate {rate}Hz): {e}")
-        finally:
-            if tmp is not None:
-                tmp.unlink(missing_ok=True)
+                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                    tmp = Path(f.name)
+                try:
+                    import asyncio
+                    import edge_tts
+                    asyncio.run(asyncio.wait_for(
+                        edge_tts.Communicate(text, voice=voice, rate=rate_str).save(str(tmp)),
+                        timeout=20))
+                except Exception as e:
+                    logger.warning("edge-tts that bai (%s) -> dung pyttsx3 offline", e)
+                    tmp.unlink(missing_ok=True)
+                    self._speak_offline(text, cfg)
+                    return
+                import soundfile as sf
+                audio, rate = sf.read(str(tmp), dtype="float32", always_2d=False)
+                # Mot so loa (VD Bluetooth/USB) khong ho tro sample rate cua file TTS
+                # -> resample ve dung default_samplerate cua thiet bi truoc khi play.
+                dev = cfg.get("speaker_device")
+                try:
+                    info = sd.query_devices(dev, "output")
+                    target = int(info.get("default_samplerate") or rate)
+                except Exception:
+                    target = rate
+                if target != rate and rate > 0:
+                    n_old = audio.shape[0]
+                    n_new = max(1, int(round(n_old * target / rate)))
+                    xp = np.linspace(0, 1, n_old)
+                    fp = np.linspace(0, 1, n_new)
+                    if audio.ndim == 1:
+                        audio = np.interp(fp, xp, audio).astype(np.float32)
+                    else:
+                        audio = np.stack(
+                            [np.interp(fp, xp, audio[:, i]) for i in range(audio.shape[1])],
+                            axis=1).astype(np.float32)
+                    rate = target
+                try:
+                    sd.play(audio, samplerate=rate, device=dev)
+                    sd.wait()
+                except Exception as e:
+                    logger.warning(f"Loa khong mo duoc (rate {rate}Hz): {e}")
+            finally:
+                if tmp is not None:
+                    tmp.unlink(missing_ok=True)
+        except Exception as e:
+            logger.warning(f"_speak error (ignored): {e}")
 
     def _speak_offline(self, text, cfg):
         """Fallback khi mat mang: pyttsx3 giong Windows (co the khong co tieng Viet)."""
-        import pyttsx3
-        import sounddevice as sd
-        engine = pyttsx3.init()
-        tmp = None
         try:
-            engine.setProperty("rate", 185)
-            for v in engine.getProperty("voices"):
-                name = (v.name + " " + v.id).lower()
-                if "vietnam" in name or "vi-vn" in name:
-                    engine.setProperty("voice", v.id)
-                    break
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                tmp = Path(f.name)
-            engine.save_to_file(text, str(tmp))
-            engine.runAndWait()
-            with wave.open(str(tmp), "rb") as wf:
-                ch, sw, rate = wf.getnchannels(), wf.getsampwidth(), wf.getframerate()
-                raw = wf.readframes(wf.getnframes())
-            types = {1: np.uint8, 2: np.int16, 4: np.int32}
-            if sw not in types:
-                raise RuntimeError(f"Dinh dang TTS khong ho tro: {sw} byte.")
-            audio = np.frombuffer(raw, dtype=types[sw])
-            audio = ((audio.astype(np.float32) - 128) / 128 if sw == 1
-                     else audio.astype(np.float32) / float(2 ** (sw * 8 - 1)))
-            if ch > 1:
-                audio = audio.reshape(-1, ch)
-            dev = cfg.get("speaker_device")
+            import pyttsx3
+            import sounddevice as sd
+            engine = pyttsx3.init()
+            tmp = None
             try:
-                info = sd.query_devices(dev, "output")
-                target = int(info.get("default_samplerate") or rate)
-            except Exception:
-                target = rate
-            if target != rate and rate > 0:
-                n_old = audio.shape[0]
-                n_new = max(1, int(round(n_old * target / rate)))
-                xp = np.linspace(0, 1, n_old)
-                fp = np.linspace(0, 1, n_new)
-                if audio.ndim == 1:
-                    audio = np.interp(fp, xp, audio).astype(np.float32)
-                else:
-                    audio = np.stack(
-                        [np.interp(fp, xp, audio[:, i]) for i in range(audio.shape[1])],
-                        axis=1).astype(np.float32)
-                rate = target
-            sd.play(audio, samplerate=rate, device=dev)
-            sd.wait()
-        finally:
-            try:
-                engine.stop()
-            except Exception:
-                pass
-            if tmp is not None:
-                tmp.unlink(missing_ok=True)
+                engine.setProperty("rate", 185)
+                for v in engine.getProperty("voices"):
+                    name = (v.name + " " + v.id).lower()
+                    if "vietnam" in name or "vi-vn" in name:
+                        engine.setProperty("voice", v.id)
+                        break
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                    tmp = Path(f.name)
+                engine.save_to_file(text, str(tmp))
+                engine.runAndWait()
+                with wave.open(str(tmp), "rb") as wf:
+                    ch, sw, rate = wf.getnchannels(), wf.getsampwidth(), wf.getframerate()
+                    raw = wf.readframes(wf.getnframes())
+                types = {1: np.uint8, 2: np.int16, 4: np.int32}
+                if sw not in types:
+                    logger.warning(f"Dinh dang TTS khong ho tro: {sw} byte.")
+                    return
+                audio = np.frombuffer(raw, dtype=types[sw])
+                audio = ((audio.astype(np.float32) - 128) / 128 if sw == 1
+                         else audio.astype(np.float32) / float(2 ** (sw * 8 - 1)))
+                if ch > 1:
+                    audio = audio.reshape(-1, ch)
+                dev = cfg.get("speaker_device")
+                try:
+                    info = sd.query_devices(dev, "output")
+                    target = int(info.get("default_samplerate") or rate)
+                except Exception:
+                    target = rate
+                if target != rate and rate > 0:
+                    n_old = audio.shape[0]
+                    n_new = max(1, int(round(n_old * target / rate)))
+                    xp = np.linspace(0, 1, n_old)
+                    fp = np.linspace(0, 1, n_new)
+                    if audio.ndim == 1:
+                        audio = np.interp(fp, xp, audio).astype(np.float32)
+                    else:
+                        audio = np.stack(
+                            [np.interp(fp, xp, audio[:, i]) for i in range(audio.shape[1])],
+                            axis=1).astype(np.float32)
+                    rate = target
+                try:
+                    sd.play(audio, samplerate=rate, device=dev)
+                    sd.wait()
+                except Exception as e:
+                    logger.warning(f"offline tts play error (ignored): {e}")
+            finally:
+                try:
+                    engine.stop()
+                except Exception:
+                    pass
+                if tmp is not None:
+                    tmp.unlink(missing_ok=True)
+        except Exception as e:
+            logger.warning(f"_speak_offline error (ignored): {e}")
 
     def _run(self):
         while not self.stop_event.is_set():
@@ -202,8 +213,8 @@ class VoiceAssistant:
                 self._speak("Xin chào, đang khởi động thiết bị.")
                 logger.info("Khoi dong: da phat loi chao xong.")
             except Exception as e:
-                logger.exception("Khong phat duoc loi chao khoi dong")
-                self._set(error=f"Không phát được lời chào khởi động: {e}")
+                logger.warning("Khong phat duoc loi chao khoi dong: %s", e)
+                self._set(error=f"Không phát được lời chào: {str(e)[:100]}")
 
         import speech_recognition as sr
         rec = sr.Recognizer()
@@ -221,7 +232,10 @@ class VoiceAssistant:
             try:
                 with sr.Microphone(device_index=cfg.get("microphone_device")) as src:
                     self._set(state="Dang nghe", error="")
-                    rec.adjust_for_ambient_noise(src, duration=0.25)
+                    try:
+                        rec.adjust_for_ambient_noise(src, duration=0.25)
+                    except Exception as e:
+                        logger.warning("adjust_for_ambient_noise failed: %s", e)
                     while not self.stop_event.is_set():
                         cur = self.get_config()
                         if (not cur.get("microphone_enabled")
@@ -234,6 +248,9 @@ class VoiceAssistant:
                                 talking = False
                                 self._set(state="Dang nghe", error="")
                             continue
+                        except Exception as e:
+                            logger.warning("listen error: %s", e)
+                            continue
                         try:
                             text = rec.recognize_google(audio, language="vi-VN").strip()
                         except sr.UnknownValueError:
@@ -243,8 +260,11 @@ class VoiceAssistant:
                             logger.info("Mic: nghe thay tieng nhung khong nhan dang duoc.")
                             continue
                         except sr.RequestError as e:
-                            self._set(state="Loi nhan dang", error=str(e))
+                            self._set(state="Loi nhan dang", error=str(e)[:100])
                             logger.warning("Nhan dang Google loi: %s", e)
+                            continue
+                        except Exception as e:
+                            logger.warning("recognize error: %s", e)
                             continue
                         self._set(last_heard=text)
                         logger.info("Mic nghe: %s", text)
@@ -252,7 +272,7 @@ class VoiceAssistant:
                         if not talking:
                             if "trợ lý ảo" not in norm and "tro ly ao" not in norm:
                                 self._set(state="Dang nghe",
-                                          error=f"chua goi dung tu khoa — vua nghe: '{text}' (hay noi 'tro ly ao')")
+                                          error=f"chua goi dung tu khoa — vua nghe: '{text[:50]}'")
                                 continue
                             talking = True
                             deadline = time.monotonic() + 60
@@ -268,9 +288,9 @@ class VoiceAssistant:
                             self._speak(self.ask(text))
                             deadline = time.monotonic() + 60
                         except Exception as e:
-                            logger.exception("assistant failed")
-                            self._set(state="Loi tro ly", error=str(e))
+                            logger.warning("assistant answer failed: %s", e)
+                            self._set(state="Loi tro ly", error=str(e)[:100])
             except Exception as e:
-                logger.exception("mic failed")
-                self._set(state="Loi micro", error=str(e))
+                logger.warning("mic error: %s", e)
+                self._set(state="Loi micro", error=str(e)[:100])
                 self.stop_event.wait(3)

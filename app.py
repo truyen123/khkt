@@ -10,10 +10,11 @@ os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 import json
 import logging
 import math
+import socket
 import time
 from collections import deque
 from pathlib import Path
-from threading import RLock, Lock
+from threading import Condition, RLock, Lock, Thread
 
 import cv2
 import numpy as np
@@ -33,7 +34,7 @@ app.jinja_env.auto_reload = True
 # Chong cache trinh duyet cu (nguyen nhan "van thay ban cu")
 @app.after_request
 def _no_cache(resp):
-    if request.path in ("/", "/video_feed") or request.path.endswith((".html", ".js", ".css")):
+    if request.path in ("/", "/kiosk", "/video_feed") or request.path.endswith((".html", ".js", ".css")):
         resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         resp.headers["Pragma"] = "no-cache"
     return resp
@@ -56,6 +57,7 @@ DEFAULT_CONFIG = {
     "gemini_api_key": "",
     "gemini_model": "gemini-2.5-flash",
     "tts_voice": "vi-VN-NamAnhNeural",
+    "voice_alerts": True,  # doc canh bao bang loa khi gu lung / cui dau / dung dien thoai
     # Nguong tu the (chinh duoc tren web)
     "back_angle_deg": 25,
     "head_dx_ratio": 0.45,
@@ -72,7 +74,7 @@ DEFAULT_CONFIG = {
 }
 device_lock = RLock()
 camera_io_lock = Lock()
-video_stream_lock = Lock()
+mediapipe_lock = Lock()  # MediaPipe not thread-safe
 
 
 def load_config():
@@ -105,6 +107,9 @@ system_status = "Dang khoi dong..."
 status_type = "success"  # success | warn | danger
 assistant_status = {"state": "Chua khoi dong", "error": "", "last_question": "", "last_answer": ""}
 vision_error = ""
+phone_detector_name = "chua khoi dong"
+last_voice_alert = 0.0
+VOICE_ALERT_COOLDOWN = 60.0
 
 study_store = StudyStore(DB_PATH)
 EVIDENCE_FPS = 2
@@ -122,8 +127,8 @@ class _DbLogHandler(logging.Handler):
     def emit(self, record):
         try:
             msg = self.format(record)[:2000]
-            # Polling access log is expected traffic; keep errors and app logs, not every poll.
-            if record.name == "werkzeug" and any(path in msg for path in self._NOISY_PATHS):
+            # Access log cua werkzeug bo qua hoan toan: ghi DB tren the SD moi request rat hai the.
+            if record.name == "werkzeug":
                 return
             lvl = record.levelname if record.levelname in ("INFO", "WARN", "WARNING", "ERROR", "CRITICAL") else "INFO"
             if lvl == "WARNING":
@@ -154,6 +159,7 @@ def open_camera(index, w=320, h=240):
         raise RuntimeError(f"Khong mo duoc camera {index}.")
     c.set(cv2.CAP_PROP_FRAME_WIDTH, w)
     c.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
+    c.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # tranh khung hinh cu bi don trong bo dem
     return c
 
 
@@ -161,6 +167,12 @@ def scan_cameras(max_index=4):
     found = []
     for i in range(max_index + 1):
         c = None
+        if cap is not None and camera_active and i == device_config["camera_index"]:
+            # Camera dang dung: khong mo lai lan 2 (Linux tu choi / lam giat hinh).
+            found.append({"id": i, "name": f"Camera {i} (dang dung)"})
+            continue
+        if os.name != "nt" and not Path(f"/dev/video{i}").exists():
+            continue
         try:
             c = cv2.VideoCapture(i)
             if c.isOpened():
@@ -230,6 +242,7 @@ if camera_active:
     except RuntimeError as e:
         camera_error = str(e)
         logger.warning(camera_error)
+        cap = None
 
 
 def apply_settings(changes):
@@ -242,7 +255,7 @@ def apply_settings(changes):
         cand.update(changes)
         if type(cand["camera_index"]) is not int or cand["camera_index"] < 0:
             raise ValueError("Chi so camera phai la so nguyen >= 0.")
-        for k in ("camera_enabled", "microphone_enabled", "speaker_enabled"):
+        for k in ("camera_enabled", "microphone_enabled", "speaker_enabled", "voice_alerts"):
             if type(cand[k]) is not bool:
                 raise ValueError(f"{k} phai la true/false.")
         for k, is_in in (("microphone_device", True), ("speaker_device", False)):
@@ -307,8 +320,21 @@ def study_context():
             f"ghi chu: {acts}; su kien gan day: {evs}")
 
 
-assistant = VoiceAssistant(get_config=current_config, get_context=study_context,
-                           on_message=study_store.add_assistant_message, on_status=on_assistant_status)
+assistant = None
+assistant_lock = Lock()
+
+def get_assistant():
+    global assistant
+    if assistant is None:
+        with assistant_lock:
+            if assistant is None:
+                try:
+                    assistant = VoiceAssistant(get_config=current_config, get_context=study_context,
+                                               on_message=study_store.add_assistant_message, on_status=on_assistant_status)
+                except Exception as e:
+                    logger.exception("Voice assistant init failed: %s", e)
+                    assistant = None
+    return assistant
 
 # Lazy YOLO (khong chan khoi dong server)
 yolo_model = None
@@ -391,6 +417,33 @@ def _enforce_evidence_quota():
             break
 
 
+DETECTOR_MODEL = BASE_DIR / "models" / "efficientdet_lite0.tflite"
+_mp_detector = None
+_mp_detector_failed = False
+
+
+def get_mp_detector(mp_mod):
+    """Bo nhan dien vat the nhe (MediaPipe) thay YOLO tren Pi 1GB RAM."""
+    global _mp_detector, _mp_detector_failed
+    if _mp_detector is not None or _mp_detector_failed or mp_mod is None:
+        return _mp_detector
+    if not DETECTOR_MODEL.is_file():
+        _mp_detector_failed = True
+        logger.warning("Thieu %s: khong nhan dien duoc dien thoai tren thiet bi nay.", DETECTOR_MODEL.name)
+        return None
+    try:
+        with mediapipe_lock:
+            _mp_detector = mp_mod.tasks.vision.ObjectDetector.create_from_options(
+                mp_mod.tasks.vision.ObjectDetectorOptions(
+                    base_options=mp_mod.tasks.BaseOptions(model_asset_path=str(DETECTOR_MODEL)),
+                    running_mode=mp_mod.tasks.vision.RunningMode.VIDEO,
+                    max_results=3, score_threshold=0.3, category_allowlist=["cell phone"]))
+    except Exception:
+        _mp_detector_failed = True
+        logger.exception("Khong khoi tao duoc MediaPipe ObjectDetector")
+    return _mp_detector
+
+
 def vision_model_error():
     miss = [p.name for p in (POSE_MODEL, HAND_MODEL) if not p.is_file()]
     if miss:
@@ -399,13 +452,38 @@ def vision_model_error():
 
 
 # ---------------------------------------------------------------- video loop
+frame_cond = Condition()
+frame_seq = 0
+
+
 def _cache_frame(buf):
-    global camera_last_frame_jpeg
-    camera_last_frame_jpeg = buf.tobytes()
+    """Luu khung hinh moi nhat va danh thuc cac client dang xem /video_feed."""
+    global camera_last_frame_jpeg, frame_seq
+    with frame_cond:
+        camera_last_frame_jpeg = buf.tobytes()
+        frame_seq += 1
+        frame_cond.notify_all()
 
 
-def generate_frames():
-    global system_status, status_type, cap, camera_error, camera_last_frame_monotonic, camera_last_frame_jpeg
+def announce(text):
+    """Doc canh bao qua loa (nen, co cooldown), khong chan vong xu ly hinh."""
+    global last_voice_alert
+    cfg = current_config()
+    now = time.monotonic()
+    if not (cfg.get("voice_alerts") and cfg.get("speaker_enabled")):
+        return
+    if now - last_voice_alert < VOICE_ALERT_COOLDOWN:
+        return
+    asst = get_assistant()
+    if asst is None:
+        return
+    last_voice_alert = now
+    Thread(target=asst._speak, args=(text,), daemon=True, name="voice-alert").start()
+
+
+def vision_loop():
+    """Vong xu ly nen: doc camera, phan tich tu the/dien thoai. Chay doc lap voi trinh duyet."""
+    global system_status, status_type, cap, camera_error, camera_last_frame_monotonic, vision_error, phone_detector_name
     err = vision_model_error()
     degraded = bool(err)  # thieu model -> van stream hinh, tam dung AI
     if err:
@@ -438,21 +516,22 @@ def generate_frames():
     pose = hands = mp_mod = None
     if not degraded:
         try:
-            import mediapipe as mp
-            mp_mod = mp
-            running = mp.tasks.vision.RunningMode.VIDEO
-            pose = mp.tasks.vision.PoseLandmarker.create_from_options(
-                mp.tasks.vision.PoseLandmarkerOptions(
-                    base_options=mp.tasks.BaseOptions(model_asset_path=str(POSE_MODEL)),
-                    running_mode=running, num_poses=1,
-                    min_pose_detection_confidence=0.5, min_pose_presence_confidence=0.5,
-                    min_tracking_confidence=0.5))
-            hands = mp.tasks.vision.HandLandmarker.create_from_options(
-                mp.tasks.vision.HandLandmarkerOptions(
-                    base_options=mp.tasks.BaseOptions(model_asset_path=str(HAND_MODEL)),
-                    running_mode=running, num_hands=2,
-                    min_hand_detection_confidence=0.5, min_hand_presence_confidence=0.5,
-                    min_tracking_confidence=0.5))
+            with mediapipe_lock:
+                import mediapipe as mp
+                mp_mod = mp
+                running = mp.tasks.vision.RunningMode.VIDEO
+                pose = mp.tasks.vision.PoseLandmarker.create_from_options(
+                    mp.tasks.vision.PoseLandmarkerOptions(
+                        base_options=mp.tasks.BaseOptions(model_asset_path=str(POSE_MODEL)),
+                        running_mode=running, num_poses=1,
+                        min_pose_detection_confidence=0.5, min_pose_presence_confidence=0.5,
+                        min_tracking_confidence=0.5))
+                hands = mp.tasks.vision.HandLandmarker.create_from_options(
+                    mp.tasks.vision.HandLandmarkerOptions(
+                        base_options=mp.tasks.BaseOptions(model_asset_path=str(HAND_MODEL)),
+                        running_mode=running, num_hands=2,
+                        min_hand_detection_confidence=0.5, min_hand_presence_confidence=0.5,
+                        min_tracking_confidence=0.5))
         except Exception as e:
             degraded = True
             vision_error = f"Khong khoi tao duoc MediaPipe: {e}"
@@ -460,7 +539,8 @@ def generate_frames():
             for task in (hands, pose):
                 try:
                     if task is not None:
-                        task.close()
+                        with mediapipe_lock:
+                            task.close()
                 except Exception:
                     pass
             pose = hands = mp_mod = None
@@ -478,12 +558,12 @@ def generate_frames():
             with device_lock:
                 active = cap if camera_active else None
                 cfg = dict(device_config)
-                if active is not None:
-                    with camera_io_lock:
-                        still_active = active is cap and camera_active
-                        ok, frame = active.read() if still_active else (False, None)
-                else:
-                    ok, frame = False, None
+            ok, frame = False, None
+            if active is not None:
+                # Khong giu device_lock khi doc: read() co the cho den 3s va se treo moi API.
+                with camera_io_lock:
+                    if active is cap and camera_active:
+                        ok, frame = active.read()
             now = time.monotonic()
             if not ok:
                 fail_count += 1
@@ -492,21 +572,25 @@ def generate_frames():
                     last_reopen = now
                     fail_count = 0
                     try:
-                        with camera_io_lock:
-                            with device_lock:
+                        # Thu tu khoa giong apply_settings (device_lock -> camera_io_lock) de khong deadlock.
+                        with device_lock:
+                            with camera_io_lock:
                                 old = cap
                                 cap = None
-                            if old is not None:
-                                old.release()
-                            replacement = open_camera(cfg["camera_index"])
-                            with device_lock:
-                                cap = replacement
+                                if old is not None:
+                                    try:
+                                        old.release()
+                                    except Exception as e:
+                                        logger.warning("release camera failed: %s", e)
+                                cap = open_camera(cfg["camera_index"])
                                 camera_error = ""
                         study_store.add_log("INFO", "camera", "Tu mo lai camera thanh cong.")
                     except Exception as e:
                         with device_lock:
                             camera_error = str(e)
+                            cap = None
                         study_store.add_log("ERROR", "camera", f"Mo lai camera that bai: {e}")
+                        logger.warning("camera reopen failed: %s", e)
                 study_store.update_presence(False, now)
                 finish_phone(local_timestamp())
                 cand_start = cand_at = last_seen = None
@@ -520,7 +604,6 @@ def generate_frames():
                     status_type = "success"
                 _, buf = cv2.imencode(".jpg", blank)
                 _cache_frame(buf)
-                yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + buf.tobytes() + b"\r\n"
                 time.sleep(CAMERA_INTERVAL)
                 continue
 
@@ -539,7 +622,6 @@ def generate_frames():
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
                 _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
                 _cache_frame(buf)
-                yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + buf.tobytes() + b"\r\n"
                 time.sleep(max(0, CAMERA_INTERVAL - (time.monotonic() - t0)))
                 continue
 
@@ -547,7 +629,8 @@ def generate_frames():
             rgb.flags.writeable = False
             mp_img = mp_mod.Image(image_format=mp_mod.ImageFormat.SRGB, data=rgb)
             ts = int(now * 1000)
-            pose_res = pose.detect_for_video(mp_img, ts)
+            with mediapipe_lock:
+                pose_res = pose.detect_for_video(mp_img, ts)
             rgb.flags.writeable = True
             img = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
             h, w = img.shape[:2]
@@ -564,6 +647,8 @@ def generate_frames():
                     stable, "%s (goc lung %.1f)" % (ana["label"], back_sm))
                 posture_start = now
                 study_store.add_log("WARN", "vision", "Tu the: %s (goc lung %.0f)." % (stable, back_sm))
+                announce("Bạn đang gù lưng, hãy ngồi thẳng lên nhé." if stable == "hunch"
+                         else "Bạn đang cúi đầu quá thấp, hãy ngẩng đầu lên nhé.")
             elif stable == "good" and posture_alert_id is not None:
                 study_store.finish_posture_alert(posture_alert_id, now - posture_start)
                 posture_alert_id = None
@@ -598,25 +683,42 @@ def generate_frames():
             if now - last_phone >= float(cfg["phone_every_seconds"]):
                 last_phone = now
                 try:
+                    boxes = []  # (x1, y1, x2, y2) cua dien thoai
                     yolo = get_yolo()
                     if yolo is not None:
-                        hr = hands.detect_for_video(mp_img, ts)
-                        wrists = []
-                        if hr.hand_landmarks:
-                            wrists = [(int(hand[0].x * w), int(hand[0].y * h)) for hand in hr.hand_landmarks]
+                        phone_detector_name = "YOLOv8n"
                         res = yolo.predict(frame, imgsz=320, conf=float(cfg["phone_conf"]),
                                            max_det=3, device="cpu", verbose=False)
                         for r in res:
                             for b in r.boxes:
-                                if yolo.names[int(b.cls[0])] != "cell phone":
-                                    continue
-                                x1, y1, x2, y2 = map(int, b.xyxy[0])
-                                held = phone_held(((x1 + x2) / 2, (y1 + y2) / 2), wrists,
-                                                  threshold_px=float(cfg["wrist_dist_px"]))
-                                cv2.rectangle(img, (x1, y1), (x2, y2),
-                                              (0, 0, 255) if held else (0, 165, 255), 2)
-                                if held:
-                                    phone_now = True
+                                if yolo.names[int(b.cls[0])] == "cell phone":
+                                    boxes.append(tuple(map(int, b.xyxy[0])))
+                    else:
+                        det = get_mp_detector(mp_mod)
+                        if det is not None:
+                            phone_detector_name = "MediaPipe EfficientDet (nhe cho Pi)"
+                            with mediapipe_lock:
+                                dres = det.detect_for_video(mp_img, ts)
+                            for d_ in dres.detections:
+                                cat = d_.categories[0]
+                                if cat.category_name == "cell phone" and cat.score >= float(cfg["phone_conf"]) * 0.8:
+                                    bb = d_.bounding_box
+                                    boxes.append((bb.origin_x, bb.origin_y,
+                                                  bb.origin_x + bb.width, bb.origin_y + bb.height))
+                        else:
+                            phone_detector_name = "tat (thieu model)"
+                    if boxes:
+                        with mediapipe_lock:
+                            hr = hands.detect_for_video(mp_img, ts)
+                        wrists = [(int(hand[0].x * w), int(hand[0].y * h))
+                                  for hand in (hr.hand_landmarks or [])]
+                        for x1, y1, x2, y2 in boxes:
+                            held = phone_held(((x1 + x2) / 2, (y1 + y2) / 2), wrists,
+                                              threshold_px=float(cfg["wrist_dist_px"]))
+                            cv2.rectangle(img, (x1, y1), (x2, y2),
+                                          (0, 0, 255) if held else (0, 165, 255), 2)
+                            if held:
+                                phone_now = True
                 except Exception as e:
                     logger.exception("Loi nhan dien dien thoai: %s", e)
 
@@ -635,6 +737,7 @@ def generate_frames():
                     phone_event = study_store.start_phone_event(
                         cand_at, "Nghi ngo su dung dien thoai (tay gan dien thoai on dinh)")
                     study_store.add_log("WARN", "vision", "Xac nhan su dung dien thoai (event %s)." % phone_event)
+                    announce("Bạn đang dùng điện thoại, hãy tập trung học bài nhé.")
                     _enforce_evidence_quota()
                     fn = "phone_%s_%s.avi" % (time.strftime("%Y%m%d_%H%M%S"), phone_event)
                     ev_path = EVIDENCE_DIR / fn
@@ -677,7 +780,6 @@ def generate_frames():
             if now - last_pre >= 1 / EVIDENCE_FPS:
                 pre_roll.append((now, buf.tobytes()))
                 last_pre = now
-            yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + buf.tobytes() + b"\r\n"
             time.sleep(max(0, CAMERA_INTERVAL - (time.monotonic() - t0)))
     finally:
         try:
@@ -701,18 +803,88 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/kiosk")
+def kiosk():
+    """Giao dien cho man hinh gan truc tiep vao Pi (HDMI/DSI)."""
+    return render_template("kiosk.html")
+
+
 @app.route("/video_feed")
 def video_feed():
-    if not video_stream_lock.acquire(blocking=False):
-        return jsonify({"error": "Camera stream dang duoc su dung boi tab khac; dong tab trung lap."}), 409
+    """MJPEG: nhieu client xem cung luc; vong xu ly chay nen, khong phu thuoc nguoi xem."""
+    def stream():
+        last = -1
+        while True:
+            with frame_cond:
+                frame_cond.wait_for(lambda: frame_seq != last, timeout=5)
+                data, last = camera_last_frame_jpeg, frame_seq
+            if data is None:
+                continue
+            yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + data + b"\r\n"
 
-    def locked_stream():
-        try:
-            yield from generate_frames()
-        finally:
-            video_stream_lock.release()
+    return Response(stream(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
-    return Response(locked_stream(), mimetype="multipart/x-mixed-replace; boundary=frame")
+
+_vision_thread = None
+
+
+def start_vision():
+    global _vision_thread
+    if _vision_thread is not None and _vision_thread.is_alive():
+        return
+
+    def runner():
+        global system_status, status_type
+        while True:
+            try:
+                vision_loop()
+            except Exception:
+                logger.exception("Vision loop crashed; restart in 3s")
+                system_status, status_type = "Loi xu ly hinh anh, dang khoi dong lai...", "danger"
+            time.sleep(3)
+
+    _vision_thread = Thread(target=runner, name="vision", daemon=True)
+    _vision_thread.start()
+
+
+def local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("10.255.255.255", 1))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except OSError:
+        return "127.0.0.1"
+
+
+@app.route("/api/kiosk")
+def api_kiosk():
+    """Mot goi du lieu nho cho man hinh Pi: trang thai, thong so, hoi thoai gan day."""
+    d = study_store.dashboard()
+    with device_lock:
+        cfg = dict(device_config)
+        cam_ok = bool(camera_active and camera_last_frame_monotonic is not None
+                      and time.monotonic() - camera_last_frame_monotonic < 3.0)
+    info = {"ip": local_ip(), "port": 5000}
+    try:
+        import psutil
+        info["cpu"] = psutil.cpu_percent(interval=None)
+        info["ram"] = psutil.virtual_memory().percent
+        temp = psutil.sensors_temperatures().get("cpu_thermal") if hasattr(psutil, "sensors_temperatures") else None
+        if temp:
+            info["temp"] = round(temp[0].current, 1)
+    except Exception:
+        pass
+    return jsonify({
+        "status": system_status, "type": status_type,
+        "camera_ok": cam_ok, "mic_on": cfg["microphone_enabled"], "speaker_on": cfg["speaker_enabled"],
+        "assistant": dict(assistant_status), "phone_detector": phone_detector_name,
+        "study_text": d["study_text"], "week_text": d["week_text"],
+        "phone_count": len(d["events"]), "posture_count": len(d["posture_alerts"]),
+        "tasks": d["tasks"][:5], "chat": study_store.recent_messages(6),
+        "system": info,
+    })
 
 
 @app.route("/api/vision_status")
@@ -832,7 +1004,10 @@ def ask_assistant():
     if not isinstance(q, str) or not q.strip() or len(q) > 1000:
         return jsonify({"error": "Cau hoi 1-1000 ky tu."}), 400
     try:
-        return jsonify({"answer": assistant.ask(q.strip())})
+        asst = get_assistant()
+        if asst is None:
+            return jsonify({"error": "Tro ly chua san sang."}), 503
+        return jsonify({"answer": asst.ask(q.strip())})
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 503
     except Exception as e:
@@ -973,18 +1148,27 @@ def toggle_camera():
 @app.route("/api/test/camera", methods=["POST"])
 def test_camera():
     idx = (request.get_json(silent=True) or {}).get("camera_index", current_config()["camera_index"])
-    if not video_stream_lock.acquire(blocking=False):
-        return jsonify({"ok": False, "error": "Camera dang duoc live stream; hay dung camera truoc khi test."}), 409
     try:
-        c = open_camera(int(idx))
+        idx = int(idx)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "camera_index khong hop le."}), 400
+    if camera_active and idx == current_config()["camera_index"]:
+        # Camera dang do vong xu ly nen giu: dung khung hinh moi nhat thay vi mo lan 2.
+        data = camera_last_frame_jpeg
+        fresh = camera_last_frame_monotonic is not None and time.monotonic() - camera_last_frame_monotonic < 3.0
+        if not data or not fresh:
+            return jsonify({"ok": False, "error": camera_error or "Camera dang bat nhung khong co khung hinh moi."}), 400
+        frame = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+        ok = frame is not None
+    else:
         try:
-            ok, frame = c.read()
-        finally:
-            c.release()
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 400
-    finally:
-        video_stream_lock.release()
+            c = open_camera(idx)
+            try:
+                ok, frame = c.read()
+            finally:
+                c.release()
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 400
     if not ok or frame is None:
         return jsonify({"ok": False, "error": "Mo duoc camera nhung khong doc duoc khung hinh."}), 400
     h, w = frame.shape[:2]
@@ -1066,5 +1250,8 @@ def test_voice():
 
 
 if __name__ == "__main__":
-    assistant.start()
+    start_vision()
+    asst = get_assistant()
+    if asst is not None:
+        asst.start()
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

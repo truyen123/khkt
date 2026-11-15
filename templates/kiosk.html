@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>StudyGuard - Màn hình thiết bị</title>
+<style>
+:root{--bg:#0d1319;--panel:#151d26;--panel2:#1b2631;--line:#26323f;--text:#e8eef4;--muted:#8a9aab;--brand:#2dd4bf;--ok:#34d399;--warn:#fbbf24;--bad:#f87171}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,"Segoe UI",Roboto,sans-serif;user-select:none}
+.app{display:grid;grid-template-rows:44px 1fr 52px;height:100%}
+header{display:flex;align-items:center;gap:12px;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--line)}
+header b{font-size:16px}.sp{flex:1}
+#clock{font-variant-numeric:tabular-nums;font-weight:600}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--muted);display:inline-block;margin-right:4px}
+.dot.on{background:var(--ok)}.dot.bad{background:var(--bad)}
+main{overflow:hidden;padding:10px}
+.tab{display:none;height:100%}.tab.active{display:block}
+nav{display:grid;grid-template-columns:repeat(4,1fr);background:var(--panel);border-top:1px solid var(--line)}
+nav button{background:none;border:0;color:var(--muted);font-size:15px;font-weight:600}
+nav button.active{color:var(--brand);background:var(--panel2)}
+.home{display:grid;grid-template-columns:1.25fr 1fr;gap:10px;height:100%}
+.video{position:relative;background:#000;border-radius:12px;overflow:hidden;min-height:0}
+.video img{width:100%;height:100%;object-fit:contain;display:block}
+.chip{position:absolute;left:8px;right:8px;bottom:8px;padding:8px 12px;border-radius:10px;font-weight:700;background:rgba(5,60,45,.9);color:#b8f5de}
+.chip.warn{background:rgba(120,70,5,.92);color:#ffe9b8}.chip.danger{background:rgba(127,20,30,.94);color:#ffd5d9}
+.side{display:flex;flex-direction:column;gap:8px;min-height:0}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px}
+.stat small{color:var(--muted)}.stat b{display:block;font-size:20px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;overflow:auto}
+.box h4{margin:0 0 6px;font-size:13px;color:var(--muted);font-weight:600}
+.grow{flex:1;min-height:0}
+.chatwrap{display:flex;flex-direction:column;height:100%;gap:8px}
+#chatLog{flex:1;overflow:auto;display:flex;flex-direction:column;gap:8px;padding:4px}
+.m{max-width:85%;padding:8px 12px;border-radius:14px;white-space:pre-wrap;user-select:text}
+.m.u{align-self:flex-end;background:#0f766e;color:#fff}.m.a{align-self:flex-start;background:var(--panel2)}
+form.ask{display:flex;gap:8px}
+input,select{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px 12px;font-size:15px;min-width:0}
+form.ask input{flex:1;user-select:text}
+button.b{background:var(--brand);color:#06201d;border:0;border-radius:10px;padding:10px 16px;font-weight:700;font-size:15px}
+button.b.g{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+button.b.r{background:var(--bad);color:#fff}
+.set{display:grid;grid-template-columns:1fr 1fr;gap:10px;height:100%;overflow:auto;align-content:start}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border:0}
+.row input[type=number]{width:90px}
+.sw{width:50px;height:28px;accent-color:var(--brand)}
+#toast{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 16px;border-radius:10px;display:none;font-weight:600}
+@media(max-width:700px){.home{grid-template-columns:1fr;grid-template-rows:1fr auto}.set{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <b>🎓 StudyGuard</b>
+  <span><span class="dot" id="dCam"></span>Cam</span>
+  <span><span class="dot" id="dMic"></span>Mic</span>
+  <span><span class="dot" id="dSpk"></span>Loa</span>
+  <span class="sp"></span>
+  <span id="clock">--:--</span>
+</header>
+<main>
+  <section class="tab active" id="t-home">
+    <div class="home">
+      <div class="video"><img id="live" src="/video_feed" alt="camera"><div id="chip" class="chip">Đang kết nối…</div></div>
+      <div class="side">
+        <div class="stats">
+          <div class="stat"><small>Học hôm nay</small><b id="sToday">—</b></div>
+          <div class="stat"><small>7 ngày</small><b id="sWeek">—</b></div>
+          <div class="stat"><small>Sai tư thế</small><b id="sPosture">0</b></div>
+          <div class="stat"><small>Dùng điện thoại</small><b id="sPhone">0</b></div>
+        </div>
+        <div class="box grow"><h4>Nhiệm vụ hôm nay</h4><div id="tasks"></div></div>
+        <div class="box"><h4>Trợ lý</h4><div id="asst">…</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab" id="t-chat">
+    <div class="chatwrap">
+      <div id="chatLog"></div>
+      <form class="ask" id="askForm">
+        <input id="q" maxlength="1000" placeholder="Hỏi bài hoặc nói “trợ lý ảo”…" autocomplete="off">
+        <button class="b" type="submit">Gửi</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="tab" id="t-set">
+    <div class="set">
+      <div class="box">
+        <h4>Thiết bị</h4>
+        <div class="row"><span>Camera</span><input class="sw" type="checkbox" id="camEn"></div>
+        <div class="row"><span>Micro (gọi “trợ lý ảo”)</span><input class="sw" type="checkbox" id="micEn"></div>
+        <div class="row"><span>Loa</span><input class="sw" type="checkbox" id="spkEn"></div>
+        <div class="row"><span>Nhắc nhở bằng giọng nói</span><input class="sw" type="checkbox" id="vaEn"></div>
+        <div class="row"><span>Giọng đọc</span>
+          <select id="voice"><option value="vi-VN-NamAnhNeural">Nam Anh</option><option value="vi-VN-ThanhBinhNeural">Thanh Bình</option>
+          <option value="vi-VN-HoaiMyNeural">Hoài My</option><option value="vi-VN-MyAnNeural">Mỹ An</option></select></div>
+      </div>
+      <div class="box">
+        <h4>Ngưỡng cảnh báo</h4>
+        <div class="row"><span>Gù lưng &gt; (độ)</span><input type="number" id="back" min="10" max="60"></div>
+        <div class="row"><span>Cúi đầu &gt; (tỉ lệ)</span><input type="number" id="head" min="0.2" max="1" step="0.05"></div>
+        <div class="row"><span>Báo sau (giây)</span><input type="number" id="alertS" min="2" max="20"></div>
+        <div class="row"><span>Xác nhận phone (giây)</span><input type="number" id="phoneS" min="10" max="120"></div>
+        <div style="margin-top:10px;display:flex;gap:8px"><button class="b" id="save">Lưu cài đặt</button><button class="b g" id="testSpk">Thử loa</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab" id="t-sys">
+    <div class="set">
+      <div class="box">
+        <h4>Hệ thống</h4>
+        <div class="row"><span>Địa chỉ web quản lý</span><b id="ip">—</b></div>
+        <div class="row"><span>CPU</span><b id="cpu">—</b></div>
+        <div class="row"><span>RAM</span><b id="ram">—</b></div>
+        <div class="row"><span>Nhiệt độ</span><b id="temp">—</b></div>
+        <div class="row"><span>Nhận diện điện thoại</span><b id="det">—</b></div>
+      </div>
+      <div class="box">
+        <h4>Gần đây</h4><div id="sysNote" style="color:var(--muted)">Mở địa chỉ web quản lý trên điện thoại/laptop cùng Wi-Fi để xem chi tiết, log và lịch sử.</div>
+      </div>
+    </div>
+  </section>
+</main>
+<nav>
+  <button class="active" data-t="home">Giám sát</button>
+  <button data-t="chat">Trò chuyện</button>
+  <button data-t="set">Cài đặt</button>
+  <button data-t="sys">Hệ thống</button>
+</nav>
+</div>
+<div id="toast"></div>
+<script>
+const $=id=>document.getElementById(id);
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',2500);}
+let cur='home';
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  cur=b.dataset.t;
+  document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.id==='t-'+cur));
+  // Chi phat video o tab Giam sat de Pi do ton CPU encode/giai ma.
+  $('live').src=cur==='home'?'/video_feed?t='+Date.now():'';
+  if(cur==='set')loadSettings();
+  if(cur==='chat')scrollChat();
+});
+setInterval(()=>{$('clock').textContent=new Date().toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'});},1000);
+
+function scrollChat(){const l=$('chatLog');l.scrollTop=l.scrollHeight;}
+let lastChatKey='';
+function renderChat(chat){
+  const key=JSON.stringify(chat.map(c=>c.created_at));
+  if(key===lastChatKey)return;lastChatKey=key;
+  const l=$('chatLog');l.replaceChildren();
+  chat.forEach(c=>{
+    const u=document.createElement('div');u.className='m u';u.textContent=c.user_text;
+    const a=document.createElement('div');a.className='m a';a.textContent=c.assistant_text;
+    l.append(u,a);
+  });
+  scrollChat();
+}
+function render(d){
+  $('chip').textContent=d.status;$('chip').className='chip '+(d.type==='success'?'':d.type);
+  $('dCam').className='dot '+(d.camera_ok?'on':'bad');
+  $('dMic').className='dot '+(d.mic_on?'on':'');
+  $('dSpk').className='dot '+(d.speaker_on?'on':'');
+  $('sToday').textContent=d.study_text;$('sWeek').textContent=d.week_text;
+  $('sPosture').textContent=d.posture_count;$('sPhone').textContent=d.phone_count;
+  const t=$('tasks');t.replaceChildren();
+  if(!d.tasks.length)t.textContent='Chưa có nhiệm vụ (thêm ở trang web quản lý).';
+  d.tasks.forEach(x=>{const e=document.createElement('div');e.textContent=(x.done?'✅ ':'⬜ ')+x.description;t.appendChild(e);});
+  const a=d.assistant||{};
+  $('asst').textContent=(a.state||'—')+(a.last_heard?' · nghe: “'+a.last_heard+'”':'');
+  renderChat(d.chat||[]);
+  const s=d.system||{};
+  $('ip').textContent='http://'+s.ip+':'+s.port;
+  $('cpu').textContent=s.cpu!=null?s.cpu+'%':'—';$('ram').textContent=s.ram!=null?s.ram+'%':'—';
+  $('temp').textContent=s.temp!=null?s.temp+' °C':'—';$('det').textContent=d.phone_detector;
+}
+function poll(){fetch('/api/kiosk').then(r=>r.json()).then(render).catch(()=>{$('chip').textContent='Mất kết nối server…';$('chip').className='chip danger';});}
+setInterval(poll,2000);poll();
+
+$('askForm').onsubmit=e=>{
+  e.preventDefault();const q=$('q').value.trim();if(!q)return;$('q').value='';
+  const l=$('chatLog');
+  const u=document.createElement('div');u.className='m u';u.textContent=q;
+  const a=document.createElement('div');a.className='m a';a.textContent='⏳ Đang suy nghĩ…';
+  l.append(u,a);scrollChat();
+  fetch('/api/assistant/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q})})
+    .then(r=>r.json().then(j=>({ok:r.ok,j}))).then(({ok,j})=>{a.textContent=ok?j.answer:'❌ '+(j.error||'Lỗi');lastChatKey='';scrollChat();})
+    .catch(err=>{a.textContent='❌ '+err.message;});
+};
+
+function post(url,body){return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}).then(r=>r.json().then(j=>({ok:r.ok,j})));}
+function loadSettings(){
+  fetch('/api/settings').then(r=>r.json()).then(j=>{
+    const s=j.settings;if(!s)return;
+    $('camEn').checked=s.camera_enabled;$('micEn').checked=s.microphone_enabled;$('spkEn').checked=s.speaker_enabled;
+    $('vaEn').checked=s.voice_alerts;$('voice').value=s.tts_voice;
+    $('back').value=s.back_angle_deg;$('head').value=s.head_dx_ratio;$('alertS').value=s.alert_after_seconds;$('phoneS').value=s.phone_confirm_seconds;
+  }).catch(()=>toast('Không tải được cài đặt'));
+}
+$('save').onclick=()=>post('/api/settings',{
+  camera_enabled:$('camEn').checked,microphone_enabled:$('micEn').checked,speaker_enabled:$('spkEn').checked,
+  voice_alerts:$('vaEn').checked,tts_voice:$('voice').value,
+  back_angle_deg:Number($('back').value),head_dx_ratio:Number($('head').value),
+  alert_after_seconds:Number($('alertS').value),phone_confirm_seconds:Number($('phoneS').value)
+}).then(({ok,j})=>toast(ok?'Đã lưu':(j.error||'Lỗi lưu')));
+$('testSpk').onclick=()=>{toast('Đang đọc thử…');post('/api/test/voice',{tts_voice:$('voice').value}).then(({ok,j})=>toast(ok?'Đã đọc thử':(j.error||'Lỗi loa')));};
+</script>
+</body>
+</html>

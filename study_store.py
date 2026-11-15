@@ -206,6 +206,17 @@ class StudyStore:
         with self._connect() as conn:
             conn.execute("INSERT INTO assistant_messages(created_at, user_text, assistant_text) VALUES (?, ?, ?)",
                          (local_timestamp(), user_text, assistant_text))
+            conn.execute("DELETE FROM assistant_messages WHERE id NOT IN "
+                         "(SELECT id FROM assistant_messages ORDER BY id DESC LIMIT 500)")
+
+    def recent_messages(self, limit=6):
+        """Hoi thoai gan day, cu -> moi (hien thi dang chat)."""
+        limit = min(max(int(limit or 6), 1), 100)
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT created_at, user_text, assistant_text FROM assistant_messages "
+                "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(r) for r in reversed(rows)]
 
     # ---- system logs ----
     def add_log(self, level, source, message):
